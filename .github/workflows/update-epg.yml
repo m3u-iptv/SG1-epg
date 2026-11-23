@@ -1,1 +1,75 @@
+name: Auto Update SG EPG
 
+on:
+  schedule:
+    # Rozana subah 6:00 AM IST (00:30 UTC) par chalega
+    - cron: '30 0 * * *'
+  workflow_dispatch: # Manual chalane ke liye button
+
+permissions:
+  contents: write
+
+jobs:
+  filter-epg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download and Filter EPG
+        run: |
+          curl -s -L "https://epgshare01.online/epgshare01/epg_ripper_SG1.xml.gz" -o full_epg.xml.gz
+          gunzip -f full_epg.xml.gz
+          
+          python3 -c '
+          import xml.etree.ElementTree as ET
+          
+          target_ids = [
+              "Colors.sg",
+              "Colors.Tamil.HD.sg",
+              "MTV.India.sg",
+              "NDTV.24x7.sg",
+              "NDTV.India.sg",
+              "SAB.TV.sg",
+              "SONY.MAX.sg",
+              "Sony.YAY!.sg",
+              "Star.Bharat.sg",
+              "STAR.Gold.sg", 
+              "Star.Maa.sg",
+              "STAR.Plus.sg",
+              "Sun.Life.sg",
+              "Sun.Music.sg",
+              "Sun.News.sg",
+              "Sun.TV.sg",
+              "Times.Now.sg",
+              "WION.sg",
+              "Zee.Tamil.sg",
+              "Zee.Thirai.sg",
+              "ZEE.TV.sg",
+          ]
+          
+          tree = ET.parse("full_epg.xml")
+          root = tree.getroot()
+          
+          new_root = ET.Element("tv", root.attrib)
+          
+          for ch in root.findall("channel"):
+              if ch.get("id") in target_ids:
+                  new_root.append(ch)
+                  
+          for prog in root.findall("programme"):
+              if prog.get("channel") in target_ids:
+                  new_root.append(prog)
+                  
+          new_tree = ET.ElementTree(new_root)
+          ET.indent(new_tree, space="  ")
+          new_tree.write("SG_epg.xml", encoding="utf-8", xml_declaration=True)
+          '
+
+      - name: Save and Push Filtered EPG
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add SG_epg.xml
+          git commit -m "Update EPG channels" || exit 0
+          git push
